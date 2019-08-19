@@ -1,0 +1,122 @@
+#!/bin/bash
+
+options() {
+
+EXTENSION="txt,html,css,js,yml,yaml"
+DIRECTORY="."
+IGNORED=()
+errorArray=()
+
+while [[ $# -gt 0 ]]
+	do
+	key="$1"
+
+	case $key in
+    	-e|--extension)
+    	EXTENSION="$2"
+    	shift
+    	shift
+    	;;
+
+        -d|--directory)
+        DIRECTORY="$2"
+        shift
+        shift
+        ;;
+
+        -i|--ignore)
+        IGNORED="$2"
+        shift
+        shift
+        ;;
+
+    	-h|--help)
+    	echo "
+        Usage: ascii [OPTION]... PATTERNS
+        Search for non-ascii characters in files within the current or chosen directory and all subdirectories.
+        Example: ascii -e txt,html,js
+
+
+            -e, --extension         chose extensions for searched files, seperate multiple extensions by comma, do not use whitespace
+            -d, --directory         chose the path of the folder in which you want to search for non-ascii files
+            -i, --ignore            chose files to be excluded from the result of your search, seperate multiple files by comma
+         "
+        exit
+    	;;
+    	*)
+    	echo 'This is an unknown option'
+    	exit
+    	;;
+	esac
+
+done
+
+}
+
+buildFindCommand(){
+
+    arrayOfExtensions=($( echo "$EXTENSION" | tr ',' '\n'))
+
+    findCommand="find $DIRECTORY -type f \( -name \"*."${arrayOfExtensions[0]}"\""
+
+    arrayOfExtensions=("${arrayOfExtensions[@]:1}")
+
+    for i in "${!arrayOfExtensions[@]}"
+        do
+            findCommand="$findCommand -or -name \"*."${arrayOfExtensions[i]}"\""
+    done
+
+    findCommand="$findCommand \\)"
+
+    if [ ${#IGNORED[@]} -ne 0 ];
+        then
+            addIgnored   
+        fi
+        
+}
+
+lookForNonAsciiInFilesWithExtension() {
+
+    foundFiles=($(eval $findCommand))
+
+        for i in "${foundFiles[@]}"
+            do
+                if ggrep -q --color='always' -P -n '[^\x00-\x7F]' $i
+                    then
+                        echo "$i"
+                        ggrep --color='always' -P -n '[^\x00-\x7F]' $i
+                        errorArray+=($i)
+                fi
+        done
+}
+
+addIgnored() {
+
+    SAVEIFS=$IFS
+    IFS=$(echo -en "\n\b")
+    arrayOfIgnored=($( echo "$IGNORED" | tr ',' '\n'))
+    IFS=$SAVEIFS
+
+    findCommand="$findCommand | ggrep -v -e \""${arrayOfIgnored[0]}"\""
+
+    arrayOfIgnored=("${arrayOfIgnored[@]:1}")
+
+    for i in "${!arrayOfIgnored[@]}"
+        do
+            findCommand="$findCommand -e \""${arrayOfIgnored[i]}"\""
+    done
+
+}
+
+options "$@";
+
+buildFindCommand
+
+SAVEIFS=$IFS
+IFS=$(echo -en "\n\b")
+
+lookForNonAsciiInFilesWithExtension
+
+IFS=$SAVEIFS
+
+exit
